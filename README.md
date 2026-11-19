@@ -1,4 +1,38 @@
-SQL Query Debugging & City Revenue Report (shop_query.sql)English | EspañolEnglishOverviewThis repository contains the debugged and verified SQLite query (shop_query.sql) for generating a city-level revenue report covering delivered orders placed in 2026 across cities with total revenue above 10,000,000.Summary of Bug FixesIncorrect Join Condition (ON i.order_id = o.customer_id):Issue & Impact: Joined order_items to orders using customer_id instead of order_id, mismatching line items across unrelated orders and distorting both row counts and revenue.Fix: Updated the join condition to ON i.order_id = o.order_id.Duplicate Counts in orders and customers (COUNT() without DISTINCT):Issue & Impact: Joining orders with order_items produces multiple rows per order, inflating order and customer counts when counted without DISTINCT.Fix: Applied COUNT(DISTINCT o.order_id) and COUNT(DISTINCT c.customer_id).Exclusive Date Filter (o.order_date > '2026-01-01'):Issue & Impact: Using strict > excluded delivered orders placed on January 1, 2026, undercounting 2026 orders and revenue.Fix: Changed the operator to >= '2026-01-01'.Aggregate Function in WHERE (SUM(...) > 10000000):Issue & Impact: SQL prohibits aggregate functions inside WHERE, causing an execution error before row grouping.Fix: Moved the revenue threshold filter to a HAVING clause after GROUP BY.Wrong Grouping Column (GROUP BY c.customer_id):Issue & Impact: Grouping by c.customer_id calculated totals per individual customer rather than aggregating metrics at the city level.Fix: Changed grouping to GROUP BY c.city.Corrected SQL Query-- Revenue report by city: delivered orders placed in 2026, cities above 10,000,000
+# SQL Query Debugging & City Revenue Report (`shop_query.sql`)
+
+[English](#english) | [Español](#español)
+
+---
+
+## English
+
+### Overview
+This repository contains the debugged and verified SQLite query (`shop_query.sql`) for generating a city-level revenue report covering **delivered orders placed in 2026** across cities with total revenue **above 10,000,000**.
+
+### Summary of Bug Fixes
+1. **Incorrect Join Condition (`ON i.order_id = o.customer_id`):**
+   - *Issue & Impact:* Joined `order_items` to `orders` using `customer_id` instead of `order_id`, mismatching line items across unrelated orders and distorting both row counts and revenue.
+   - *Fix:* Updated the join condition to `ON i.order_id = o.order_id`.
+
+2. **Duplicate Counts in `orders` and `customers` (`COUNT()` without `DISTINCT`):**
+   - *Issue & Impact:* Joining `orders` with `order_items` produces multiple rows per order, inflating order and customer counts when counted without `DISTINCT`.
+   - *Fix:* Applied `COUNT(DISTINCT o.order_id)` and `COUNT(DISTINCT c.customer_id)`.
+
+3. **Exclusive Date Filter (`o.order_date > '2026-01-01'`):**
+   - *Issue & Impact:* Using strict `>` excluded delivered orders placed on January 1, 2026, undercounting 2026 orders and revenue.
+   - *Fix:* Changed the operator to `>= '2026-01-01'`.
+
+4. **Aggregate Function in `WHERE` (`SUM(...) > 10000000`):**
+   - *Issue & Impact:* SQL prohibits aggregate functions inside `WHERE`, causing an execution error before row grouping.
+   - *Fix:* Moved the revenue threshold filter to a `HAVING` clause after `GROUP BY`.
+
+5. **Wrong Grouping Column (`GROUP BY c.customer_id`):**
+   - *Issue & Impact:* Grouping by `c.customer_id` calculated totals per individual customer rather than aggregating metrics at the city level.
+   - *Fix:* Changed grouping to `GROUP BY c.city`.
+
+### Corrected SQL Query
+```sql
+-- Revenue report by city: delivered orders placed in 2026, cities above 10,000,000
 SELECT c.city,
        COUNT(DISTINCT o.order_id) AS orders, -- FIXED: added DISTINCT to prevent duplicate order counts across multiple order_items rows
        COUNT(DISTINCT c.customer_id) AS customers, -- FIXED: added DISTINCT to avoid inflating customer counts per city due to order_items join
@@ -10,7 +44,49 @@ WHERE o.status = 'delivered' AND o.order_date >= '2026-01-01' -- FIXED: used >= 
 GROUP BY c.city -- FIXED: grouped by c.city instead of c.customer_id to aggregate metrics per city
 HAVING SUM(i.quantity * i.unit_price) > 10000000 -- FIXED: moved aggregate revenue filter from WHERE to HAVING after GROUP BY
 ORDER BY revenue DESC;
-Verification & Expected OutputExecuted !python run_shop_query.py against shop.db and confirmed the output matches the expected metrics for Buenos Aires, Córdoba, Rosario, and Mendoza:cityorderscustomersrevenueBuenos Aires1925251,567,400.00Córdoba1243833,194,000.00Rosario682419,133,300.00Mendoza671716,827,900.00EspañolDescripción generalEste repositorio contiene la consulta SQLite depurada y verificada (shop_query.sql) para generar un reporte de ingresos por ciudad correspondiente a órdenes entregadas en 2026 en ciudades con ingresos totales superiores a 10,000,000.Resumen de errores corregidosCondición de JOIN incorrecta (ON i.order_id = o.customer_id):Problema e impacto: Unía order_items con orders usando customer_id en lugar de order_id, mezclando ítems entre órdenes distintas y alterando tanto los conteos como los ingresos.Solución: Se corrigió la condición a ON i.order_id = o.order_id.Conteos duplicados en orders y customers (COUNT() sin DISTINCT):Problema e impacto: Unir orders con order_items genera múltiples filas por orden, inflando los conteos de órdenes y clientes al no usar DISTINCT.Solución: Se aplicó COUNT(DISTINCT o.order_id) y COUNT(DISTINCT c.customer_id).Filtro de fecha excluyente (o.order_date > '2026-01-01'):Problema e impacto: Usar > estricto dejaba fuera las órdenes entregadas el 1 de enero de 2026, subestimando órdenes e ingresos del año.Solución: Se cambió el operador a >= '2026-01-01'.Función de agregación en WHERE (SUM(...) > 10000000):Problema e impacto: SQL no permite funciones de agregación dentro de WHERE, provocando un error de ejecución antes de agrupar.Solución: Se trasladó el filtro de ingresos a una cláusula HAVING posterior a GROUP BY.Columna de agrupación incorrecta (GROUP BY c.customer_id):Problema e impacto: Agrupar por c.customer_id dividía los totales por cliente individual en lugar de consolidar las métricas por ciudad.Solución: Se cambió la agrupación a GROUP BY c.city.Consulta SQL corregida-- Revenue report by city: delivered orders placed in 2026, cities above 10,000,000
+```
+
+### Verification & Expected Output
+Executed `!python run_shop_query.py` against `shop.db` and confirmed the output matches the expected metrics for Buenos Aires, Córdoba, Rosario, and Mendoza:
+
+| city | orders | customers | revenue |
+| :--- | ---: | ---: | ---: |
+| Buenos Aires | 192 | 52 | 51,567,400.00 |
+| Córdoba | 124 | 38 | 33,194,000.00 |
+| Rosario | 68 | 24 | 19,133,300.00 |
+| Mendoza | 67 | 17 | 16,827,900.00 |
+
+---
+
+## Español
+
+### Descripción general
+Este repositorio contiene la consulta SQLite depurada y verificada (`shop_query.sql`) para generar un reporte de ingresos por ciudad correspondiente a **órdenes entregadas en 2026** en ciudades con ingresos totales **superiores a 10,000,000**.
+
+### Resumen de errores corregidos
+1. **Condición de `JOIN` incorrecta (`ON i.order_id = o.customer_id`):**
+   - *Problema e impacto:* Unía `order_items` con `orders` usando `customer_id` en lugar de `order_id`, mezclando ítems entre órdenes distintas y alterando tanto los conteos como los ingresos.
+   - *Solución:* Se corrigió la condición a `ON i.order_id = o.order_id`.
+
+2. **Conteos duplicados en `orders` y `customers` (`COUNT()` sin `DISTINCT`):**
+   - *Problema e impacto:* Unir `orders` con `order_items` genera múltiples filas por orden, inflando los conteos de órdenes y clientes al no usar `DISTINCT`.
+   - *Solución:* Se aplicó `COUNT(DISTINCT o.order_id)` y `COUNT(DISTINCT c.customer_id)`.
+
+3. **Filtro de fecha excluyente (`o.order_date > '2026-01-01'`):**
+   - *Problema e impacto:* Usar `>` estricto dejaba fuera las órdenes entregadas el 1 de enero de 2026, subestimando órdenes e ingresos del año.
+   - *Solución:* Se cambió el operador a `>= '2026-01-01'`.
+
+4. **Función de agregación en `WHERE` (`SUM(...) > 10000000`):**
+   - *Problema e impacto:* SQL no permite funciones de agregación dentro de `WHERE`, provocando un error de ejecución antes de agrupar.
+   - *Solución:* Se trasladó el filtro de ingresos a una cláusula `HAVING` posterior a `GROUP BY`.
+
+5. **Columna de agrupación incorrecta (`GROUP BY c.customer_id`):**
+   - *Problema e impacto:* Agrupar por `c.customer_id` dividía los totales por cliente individual en lugar de consolidar las métricas por ciudad.
+   - *Solución:* Se cambió la agrupación a `GROUP BY c.city`.
+
+### Consulta SQL corregida
+```sql
+-- Revenue report by city: delivered orders placed in 2026, cities above 10,000,000
 SELECT c.city,
        COUNT(DISTINCT o.order_id) AS orders, -- FIXED: added DISTINCT to prevent duplicate order counts across multiple order_items rows
        COUNT(DISTINCT c.customer_id) AS customers, -- FIXED: added DISTINCT to avoid inflating customer counts per city due to order_items join
@@ -22,4 +98,14 @@ WHERE o.status = 'delivered' AND o.order_date >= '2026-01-01' -- FIXED: used >= 
 GROUP BY c.city -- FIXED: grouped by c.city instead of c.customer_id to aggregate metrics per city
 HAVING SUM(i.quantity * i.unit_price) > 10000000 -- FIXED: moved aggregate revenue filter from WHERE to HAVING after GROUP BY
 ORDER BY revenue DESC;
-Verificación y salida esperadaSe ejecutó !python run_shop_query.py sobre shop.db y se confirmó que el resultado coincide con las métricas esperadas para Buenos Aires, Córdoba, Rosario y Mendoza:cityorderscustomersrevenueBuenos Aires1925251,567,400.00Córdoba1243833,194,000.00Rosario682419,133,300.00Mendoza671716,827,900.00
+```
+
+### Verificación y salida esperada
+Se ejecutó `!python run_shop_query.py` sobre `shop.db` y se confirmó que el resultado coincide con las métricas esperadas para Buenos Aires, Córdoba, Rosario y Mendoza:
+
+| city | orders | customers | revenue |
+| :--- | ---: | ---: | ---: |
+| Buenos Aires | 192 | 52 | 51,567,400.00 |
+| Córdoba | 124 | 38 | 33,194,000.00 |
+| Rosario | 68 | 24 | 19,133,300.00 |
+| Mendoza | 67 | 17 | 16,827,900.00 |
